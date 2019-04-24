@@ -1,5 +1,6 @@
 package com.secure.lab.cipher;
 
+import jdk.net.SocketFlow;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,12 +18,43 @@ import java.security.spec.InvalidKeySpecException;
 
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.HashMap;
 
 import static javax.crypto.Cipher.ENCRYPT_MODE;
 
 @AllArgsConstructor
 @RestController
 public class AuthController {
+
+    private static byte[] cipherMessage;
+
+    static{
+
+        KeyPair pair = null;
+        try {
+            pair = AuthService.generateRSAKeyPairs();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        byte[] publicKey = pair.getPublic().getEncoded();
+
+        try (FileOutputStream out = new FileOutputStream("public")) {
+            // write a byte sequence
+            out.write(publicKey);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        byte[] privateKey = pair.getPrivate().getEncoded();
+
+        try (FileOutputStream out = new FileOutputStream("private")) {
+            // write a byte sequence
+            out.write(privateKey);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     @Autowired
     private final AuthService authService;
@@ -49,27 +81,6 @@ public class AuthController {
 
     @GetMapping("/rsa-key")
     public ResponseEntity<?> generateRSAKeyPairs() throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-        KeyPair pair = authService.generateRSAKeyPairs();
-        byte[] publicKey = pair.getPublic().getEncoded();
-
-        try (FileOutputStream out = new FileOutputStream("public")) {
-            // write a byte sequence
-            out.write(publicKey);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        byte[] privateKey = pair.getPrivate().getEncoded();
-
-        try (FileOutputStream out = new FileOutputStream("private")) {
-            // write a byte sequence
-            out.write(privateKey);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-
 
 
         File file = new File("public");
@@ -92,7 +103,7 @@ public class AuthController {
             //Perform Encryption
             String msg ="msg";
             byte[] cipherText = cipher.doFinal(msg.getBytes()) ;
-            test(cipherText);
+            cipherMessage = cipherText;
 
         }
         catch (FileNotFoundException e) {
@@ -101,48 +112,43 @@ public class AuthController {
         catch (IOException ioe) {
             System.out.println("Exception while reading file " + ioe);
         }
-
-
         return ResponseEntity.ok().build();
 
     }
 
-//    @RequestMapping("/test")
-    public void test( byte[] cipherText) throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+    @GetMapping("/test")
+    public  ResponseEntity<?> test() throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IOException {
 
-        File file = new File("private");
+        String decryptedMessage;
+        if(cipherMessage == null){
+            decryptedMessage = "No message left";
+        }else {
 
-        try (FileInputStream fin = new FileInputStream(file)) {
-            // create FileInputStream object
+            File file = new File("private");
 
-            byte fileContent[] = new byte[(int)file.length()];
+            try (FileInputStream fin = new FileInputStream(file)) {
+                // create FileInputStream object
 
-            // Reads up to certain bytes of data from this input stream into an array of bytes.
-            fin.read(fileContent);
+                byte fileContent[] = new byte[(int) file.length()];
 
-            PrivateKey pkRecovered = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(fileContent));
+                // Reads up to certain bytes of data from this input stream into an array of bytes.
+                fin.read(fileContent);
 
-            //Get Cipher Instance RSA With ECB Mode and OAEPWITHSHA-512ANDMGF1PADDING Padding
-            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWITHSHA-512ANDMGF1PADDING");
+                PrivateKey pkRecovered = KeyFactory.getInstance("RS").generatePrivate(new PKCS8EncodedKeySpec(fileContent));
 
-            //Initialize Cipher for DECRYPT_MODE
-            cipher.init(Cipher.DECRYPT_MODE, pkRecovered);
+                //Get Cipher Instance RSA With ECB Mode and OAEPWITHSHA-512ANDMGF1PADDING Padding
+                Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWITHSHA-512ANDMGF1PADDING");
 
-            //Perform Decryption
-            byte[] decryptedTextArray = cipher.doFinal(cipherText);
+                //Initialize Cipher for DECRYPT_MODE
+                cipher.init(Cipher.DECRYPT_MODE, pkRecovered);
 
-            System.out.println(new String(decryptedTextArray));
+                //Perform Decryption
+                byte[] decryptedTextArray = cipher.doFinal(cipherMessage);
+                decryptedMessage = new String(decryptedTextArray);
 
+                System.out.println(new String(decryptedTextArray));
+            }
         }
-        catch (FileNotFoundException e) {
-            System.out.println("File not found" + e);
-        }
-        catch (IOException ioe) {
-            System.out.println("Exception while reading file " + ioe);
-        }
-
-
+        return ResponseEntity.ok(decryptedMessage);
     }
-
-
 }

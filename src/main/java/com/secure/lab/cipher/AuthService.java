@@ -58,7 +58,7 @@ public class AuthService {
         return md.digest(password.getBytes(StandardCharsets.UTF_8));
     }
 
-    public KeyPair generateRSAKeyPairs() throws NoSuchAlgorithmException {
+    public static KeyPair generateRSAKeyPairs() throws NoSuchAlgorithmException {
         // Get an instance of the RSA key generator
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(4096);
