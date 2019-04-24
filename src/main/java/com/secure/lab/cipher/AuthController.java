@@ -1,6 +1,5 @@
 package com.secure.lab.cipher;
 
-import jdk.net.SocketFlow;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,9 +78,8 @@ public class AuthController {
         }
     }
 
-    @GetMapping("/rsa-key")
-    public ResponseEntity<?> generateRSAKeyPairs() throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-
+    @PostMapping("/rsa-in")
+    public ResponseEntity<?> generateRSAKeyPairs(@NonNull @RequestParam String message) {
 
         File file = new File("public");
 
@@ -101,27 +99,23 @@ public class AuthController {
             cipher.init(ENCRYPT_MODE, pkRecovered);
 
             //Perform Encryption
-            String msg ="msg";
-            byte[] cipherText = cipher.doFinal(msg.getBytes()) ;
+            byte[] cipherText = cipher.doFinal(message.getBytes()) ;
             cipherMessage = cipherText;
 
+        }catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        catch (FileNotFoundException e) {
-            System.out.println("File not found" + e);
-        }
-        catch (IOException ioe) {
-            System.out.println("Exception while reading file " + ioe);
-        }
-        return ResponseEntity.ok().build();
 
+        return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/test")
-    public  ResponseEntity<?> test() throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IOException {
+    @GetMapping("/rsa-out")
+    public  ResponseEntity<?> test() {
 
         String decryptedMessage;
         if(cipherMessage == null){
-            decryptedMessage = "No message left";
+            decryptedMessage = "No message left for you";
         }else {
 
             File file = new File("private");
@@ -134,7 +128,7 @@ public class AuthController {
                 // Reads up to certain bytes of data from this input stream into an array of bytes.
                 fin.read(fileContent);
 
-                PrivateKey pkRecovered = KeyFactory.getInstance("RS").generatePrivate(new PKCS8EncodedKeySpec(fileContent));
+                PrivateKey pkRecovered = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(fileContent));
 
                 //Get Cipher Instance RSA With ECB Mode and OAEPWITHSHA-512ANDMGF1PADDING Padding
                 Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWITHSHA-512ANDMGF1PADDING");
@@ -146,7 +140,9 @@ public class AuthController {
                 byte[] decryptedTextArray = cipher.doFinal(cipherMessage);
                 decryptedMessage = new String(decryptedTextArray);
 
-                System.out.println(new String(decryptedTextArray));
+            }catch (Exception e) {
+                e.printStackTrace();
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
         }
         return ResponseEntity.ok(decryptedMessage);
