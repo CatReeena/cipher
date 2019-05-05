@@ -2,22 +2,18 @@ package com.secure.lab.cipher;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
 import java.io.*;
 import java.security.*;
-import java.security.spec.InvalidKeySpecException;
 
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.HashMap;
 
 import static javax.crypto.Cipher.ENCRYPT_MODE;
 
@@ -25,30 +21,56 @@ import static javax.crypto.Cipher.ENCRYPT_MODE;
 @RestController
 public class AuthController {
 
-    private static byte[] cipherMessage;
+    private static byte[] rsaCipherMessage;
+    private static byte[] elGamalCipherMessage;
+    public static final String RSA_PUBLIC_PATH = "rsa_public.der";
+    public static final String RSA_PRIVATE_PATH = "rsa_private.der";
+    public static final String ELGAMAL_PUBLIC_PATH = "el_public.der";
+    public static final String ELGAMAL_PRIVATE_PATH = "el_private.der";
+
+    public static SecureRandom random;
 
     static{
 
-        KeyPair pair = null;
+        //Generate and store RSA private and public keys
+        KeyPair rsaPair = null;
         try {
-            pair = AuthService.generateRSAKeyPairs();
+            rsaPair = AuthService.generateRSAKeyPairs();
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
-        byte[] publicKey = pair.getPublic().getEncoded();
+        byte[] rsaPublicKey = rsaPair.getPublic().getEncoded();
+        byte[] rsaPrivateKey = rsaPair.getPrivate().getEncoded();
 
-        try (FileOutputStream out = new FileOutputStream("public")) {
-            // write a byte sequence
-            out.write(publicKey);
+        storeKey(rsaPublicKey, RSA_PUBLIC_PATH);
+        storeKey(rsaPrivateKey, RSA_PRIVATE_PATH);
 
-        } catch (IOException e) {
+        Security.addProvider(new BouncyCastleProvider());
+        KeyPairGenerator elGamalGenerator = null;
+        try {
+            elGamalGenerator = KeyPairGenerator.getInstance("ElGamal", "BC");
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (NoSuchProviderException e) {
             e.printStackTrace();
         }
-        byte[] privateKey = pair.getPrivate().getEncoded();
 
-        try (FileOutputStream out = new FileOutputStream("private")) {
+        //Generate and store ElGamal private and public keys
+        random = new SecureRandom();
+        elGamalGenerator.initialize(256, random);
+
+        KeyPair elGamalPair = elGamalGenerator.generateKeyPair();
+        byte[] elGamalPubilcKey = elGamalPair.getPublic().getEncoded();
+        byte[] elGamalPrivateKey = elGamalPair.getPrivate().getEncoded();
+
+        storeKey(elGamalPubilcKey, ELGAMAL_PUBLIC_PATH);
+        storeKey(elGamalPrivateKey, ELGAMAL_PRIVATE_PATH);
+    }
+
+    private static void storeKey(byte[] key, String s) {
+        try (FileOutputStream out = new FileOutputStream(s)) {
             // write a byte sequence
-            out.write(privateKey);
+            out.write(key);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -81,7 +103,7 @@ public class AuthController {
     @PostMapping("/rsa-in")
     public ResponseEntity<?> generateRSAKeyPairs(@NonNull @RequestParam String message) {
 
-        File file = new File("public");
+        File file = new File(RSA_PUBLIC_PATH);
 
         try (FileInputStream fin = new FileInputStream(file)) {
             // create FileInputStream object
@@ -100,7 +122,7 @@ public class AuthController {
 
             //Perform Encryption
             byte[] cipherText = cipher.doFinal(message.getBytes()) ;
-            cipherMessage = cipherText;
+            rsaCipherMessage = cipherText;
 
         }catch (Exception e) {
             e.printStackTrace();
@@ -111,14 +133,14 @@ public class AuthController {
     }
 
     @GetMapping("/rsa-out")
-    public  ResponseEntity<?> test() {
+    public  ResponseEntity<?> getRSAMessageLeft() {
 
         String decryptedMessage;
-        if(cipherMessage == null){
+        if(rsaCipherMessage == null){
             decryptedMessage = "No message left for you";
         }else {
 
-            File file = new File("private");
+            File file = new File(RSA_PRIVATE_PATH);
 
             try (FileInputStream fin = new FileInputStream(file)) {
                 // create FileInputStream object
@@ -137,7 +159,76 @@ public class AuthController {
                 cipher.init(Cipher.DECRYPT_MODE, pkRecovered);
 
                 //Perform Decryption
-                byte[] decryptedTextArray = cipher.doFinal(cipherMessage);
+                byte[] decryptedTextArray = cipher.doFinal(rsaCipherMessage);
+                decryptedMessage = new String(decryptedTextArray);
+
+            }catch (Exception e) {
+                e.printStackTrace();
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
+        }
+        return ResponseEntity.ok(decryptedMessage);
+    }
+
+    @PostMapping("/elgamal-in")
+    public ResponseEntity<?> generateElGamalKeyPairs(@NonNull @RequestParam String message) {
+
+        File file = new File(ELGAMAL_PUBLIC_PATH);
+
+        try (FileInputStream fin = new FileInputStream(file)) {
+            // create FileInputStream object
+
+            byte fileContent[] = new byte[(int)file.length()];
+
+            // Reads up to certain bytes of data from this input stream into an array of bytes.
+            fin.read(fileContent);
+
+            Cipher cipher = Cipher.getInstance("ElGamal/None/NoPadding", "BC");
+
+            PublicKey pkRecovered = KeyFactory.getInstance("ElGamal").generatePublic(new X509EncodedKeySpec(fileContent));
+
+            cipher.init(Cipher.ENCRYPT_MODE, pkRecovered, random);
+            byte[] cipherText = cipher.doFinal(message.getBytes());
+            elGamalCipherMessage = cipherText;
+            //System.out.println("cipher: " + new String(cipherText));
+
+
+        }catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/elgamal-out")
+    public  ResponseEntity<?> getElGamalMessageLeft() {
+
+        String decryptedMessage;
+        if(elGamalCipherMessage == null){
+            decryptedMessage = "No message left for you";
+        }else {
+
+            File file = new File(ELGAMAL_PRIVATE_PATH);
+
+            try (FileInputStream fin = new FileInputStream(file)) {
+                // create FileInputStream object
+
+                byte fileContent[] = new byte[(int) file.length()];
+
+                // Reads up to certain bytes of data from this input stream into an array of bytes.
+                fin.read(fileContent);
+
+                PrivateKey pkRecovered = KeyFactory.getInstance("ElGamal").generatePrivate(new PKCS8EncodedKeySpec(fileContent));
+
+                //Get Cipher Instance RSA With ECB Mode and OAEPWITHSHA-512ANDMGF1PADDING Padding
+                Cipher cipher = Cipher.getInstance("ElGamal/None/NoPadding", "BC");
+
+                //Initialize Cipher for DECRYPT_MODE
+                cipher.init(Cipher.DECRYPT_MODE, pkRecovered);
+
+                //Perform Decryption
+                byte[] decryptedTextArray = cipher.doFinal(elGamalCipherMessage);
                 decryptedMessage = new String(decryptedTextArray);
 
             }catch (Exception e) {
