@@ -12,6 +12,7 @@ import javax.crypto.Cipher;
 import java.io.*;
 import java.security.*;
 
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
@@ -82,8 +83,8 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@NonNull @RequestParam String username,
-                                      @NonNull @RequestParam String password) throws NoSuchAlgorithmException {
-        if(authService.storeUser(username, password)){
+                                      @NonNull @RequestParam String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if(authService.storeUser(username, password, HashAlgorithm.MD5)){
             return ResponseEntity.ok().build();
         }else {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -92,8 +93,28 @@ public class AuthController {
 
     @PostMapping("/auth")
     public ResponseEntity<?> authenticate(@NonNull @RequestParam String username,
-                                          @NonNull @RequestParam String password) throws NoSuchAlgorithmException {
-        if(authService.authenticate(username, password)){
+                                          @NonNull @RequestParam String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if(authService.authenticate(username, password, HashAlgorithm.MD5)){
+            return ResponseEntity.ok().build();
+        }else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @PostMapping("/register-sha1")
+    public ResponseEntity<?> registerSHA1(@NonNull @RequestParam String username,
+                                      @NonNull @RequestParam String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if(authService.storeUser(username, password, HashAlgorithm.SHA1)){
+            return ResponseEntity.ok().build();
+        }else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @PostMapping("/auth-sha1")
+    public ResponseEntity<?> authenticateSHA1(@NonNull @RequestParam String username,
+                                          @NonNull @RequestParam String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if(authService.authenticate(username, password, HashAlgorithm.SHA1)){
             return ResponseEntity.ok().build();
         }else {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
